@@ -40,5 +40,5 @@ def pse(data, srate, channels):
     return PSE
 
 
-a = pse(data, 250, 3)
-print(a)
+# a = pse(data, 250, 3)
+# print(a)
