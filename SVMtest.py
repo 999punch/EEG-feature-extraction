@@ -44,9 +44,9 @@ def main():
                   'kernel': ['rbf']}
 
     model = svm.SVC()
-    创建一个GridSearchCV对象
+    # 创建一个GridSearchCV对象
     grid = GridSearchCV(model, param_grid, refit=True, n_jobs=16, verbose=3)
-    使用训练集的特征和标签训练分类器
+    # 使用训练集的特征和标签训练分类器
     grid.fit(features, labels.squeeze())
     print("Best: %f using %s" % (grid.best_score_, grid.best_params_))
     y_pred = grid.predict(x_test)
