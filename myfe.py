@@ -3,6 +3,14 @@ import scipy
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from scipy.stats import entropy
+
+band = [[0.5, 4],  # delta
+        [4, 8],  # theta
+        [8, 13],  # alpha
+        [13, 30],  # beta
+        [30, 100],  # gamma
+        [0.5, 100]]  # 全波段
 
 
 # 对脑电数据进行高通、低通滤波和陷阱滤波的函数
@@ -19,7 +27,7 @@ def filter_eeg(eeg_matrix, sfreq, l_freq, h_freq, notch_freq):
     # 应用高通和低通滤波器
     # raw.filter(l_freq=l_freq, h_freq=h_freq)
     # 应用陷阱滤波器
-    raw.notch_filter(notch_freq, notch_widths=1, n_jobs=1)
+    raw.notch_filter(notch_freq, notch_widths=1)
     # 返回滤波后的数据
     return raw
 
@@ -37,9 +45,9 @@ def se(data, channels):
         counts, bin_edges = np.histogram(data[i, :], bins=num_bins)
         # 计算概率
         probabilities = counts / data.shape[1]
-        print(probabilities)
-        # 计算香农熵，加上一个值防止对0取对数
-        SE[i] = -np.sum(probabilities * np.log2(probabilities + np.finfo(float).eps))
+        # 计算香农熵，加上一个极小值防止对0取对数
+        SE[i] = entropy(probabilities, base=2)
+        # SE[i] = -np.sum(probabilities * np.log2(probabilities + np.finfo(float).eps))
 
     return SE
 
@@ -53,20 +61,30 @@ def pse(data, srate, channels):
     c = 20
     # PSE为一个记录功率谱熵的矩阵，行代表通道，列代表各个波段的功率谱熵
     PSE = np.zeros((channels, 6))
+    # data为输入数据矩阵，fs为采样率，window为进行傅里叶变化的窗函数，nperseg代表窗长度，noverlap代表窗口重合度
+    # nfft可理解为功率谱图的分辨率，即每隔(1/c)Hz计算一次功率谱，detrend代表去趋势化参数
+    # f为频率横轴，pxx为功率谱密度，是一个通道数*频率采样点数的矩阵
     f, pxx = scipy.signal.welch(data, fs=srate, window='hann', nperseg=srate * 2, noverlap=0,
                                 nfft=c * srate, detrend=False)
     # 取对数，得出相对功率谱密度
     psd = 10 * np.log10(pxx)
     # 给每个通道计算每个波段的功率谱熵（通道序号从0开始）
     for i in range(0, channels):
-        PSE[i, 0] = -np.sum(pxx[i, round(0.5 * c):4 * c] *
-                            np.log2(pxx[i, round(0.5 * c):4 * c]))
-        PSE[i, 1] = -np.sum(pxx[i, 4 * c:8 * c] * np.log2(pxx[i, 4 * c:8 * c]))
-        PSE[i, 2] = -np.sum(pxx[i, 8 * c:13 * c] * np.log2(pxx[i, 8 * c:13 * c]))
-        PSE[i, 3] = -np.sum(pxx[i, 13 * c:30 * c] * np.log2(pxx[i, 13 * c:30 * c]))
-        PSE[i, 4] = -np.sum(pxx[i, 30 * c:100 * c] * np.log2(pxx[i, 30 * c:100 * c]))
-        PSE[i, 5] = -np.sum(pxx[i, round(0.5 * c):100 * c] *
-                            np.log2(pxx[i, round(0.5 * c):100 * c]))
+        for j in range(0, 6):
+            f_bool = (f >= band[j][0]) & (f <= band[j][1])
+            f_band = f[f_bool]
+            pxx_band = pxx[i,f_bool]
+            # pxx_prob = pxx_band / np.sum(pxx_band)    不需要，scipy.stats.entropy()会自动对数据进行归一化
+            PSE[i,j] = entropy(pxx_band,base=2)
+
+            # PSE[i, 0] = -np.sum(pxx[i, round(0.5 * c):4 * c] *
+            #                     np.log2(pxx[i, round(0.5 * c):4 * c]))
+            # PSE[i, 1] = -np.sum(pxx[i, 4 * c:8 * c] * np.log2(pxx[i, 4 * c:8 * c]))
+            # PSE[i, 2] = -np.sum(pxx[i, 8 * c:13 * c] * np.log2(pxx[i, 8 * c:13 * c]))
+            # PSE[i, 3] = -np.sum(pxx[i, 13 * c:30 * c] * np.log2(pxx[i, 13 * c:30 * c]))
+            # PSE[i, 4] = -np.sum(pxx[i, 30 * c:100 * c] * np.log2(pxx[i, 30 * c:100 * c]))
+            # PSE[i, 5] = -np.sum(pxx[i, round(0.5 * c):100 * c] *
+            #                     np.log2(pxx[i, round(0.5 * c):100 * c]))
     # 画出各通道功率谱图
     # plt.figure()
     # plt.plot(f[0:100 * c], psd[0, 0:100 * c])
@@ -79,21 +97,46 @@ def pse(data, srate, channels):
     return PSE
 
 
+# 计算
+def cf(data, srate, channels):
+    # data为脑电信号矩阵，行为通道，列为采样点
+    # srate代表采样频率
+    # channels代表通道数
+    CF = np.zeros((channels, 6))
+    c = 20
+    f, psd = scipy.signal.welch(data, fs=srate, window='hann', nperseg=srate * 2, noverlap=0,
+                                nfft=c * srate, detrend=False)
+    for i in range(0, channels):
+        for j in range(0, 6):
+            f_bool = (f >= band[j][0]) & (f < band[j][1])
+            f_band = f[f_bool]
+            psd_band = psd[i,f_bool]
+            CF[i,j] = np.sum(psd_band * f_band) / np.sum(psd_band)
+
+    return CF
+
+
 # 用于函数编写时的测试
 def main():
+    mne.set_log_level(verbose='WARNING')
     data = scipy.io.loadmat(
         r"D:\IDM\下载\抑郁症数据集\MODMA数据集\EEG_3channels_resting_lanzhou_2015\02010001_still.mat")
     data = data['data'] / 1000000
     data = data.T
     newraw = filter_eeg(data, 250, 0.5, 100, 50)
-    p = pse(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
-    q = p.reshape(1, p.shape[0] * p.shape[1])[0]
-    print(p)
-    print(q)
+
+    # 功率谱熵
+    # p = pse(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
+    # print(p)
     # plt.show()
-    # newraw = filter_eeg(data, 250, 0.5, 100, 50)
+
+    # 香农熵
     # s = se(newraw.get_data(), newraw.info['nchan'])
     # print(s)
+
+    #中心频率
+    # q = cf(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
+    # print(q)
 
 
 if __name__ == '__main__':
