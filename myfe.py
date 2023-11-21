@@ -142,10 +142,6 @@ def rcf(data, srate, channels):
     return RCF
 
 
-def cd(data,channels):
-    return cd
-
-
 
 # 用于函数编写时的测试
 def main():
