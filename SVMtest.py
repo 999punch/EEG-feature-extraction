@@ -1,7 +1,7 @@
 from sklearn import svm
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, LeaveOneOut
 import myfe
 import mne
 import scipy
@@ -30,7 +30,7 @@ def main():
             data = scipy.io.loadmat(os.path.join(folder, file))
             data = data['data'] / 1000000
             data = data.T
-            data = data[:, list(range(60 * 250))]
+            data = data[:, np.arange(round(data.shape[1] / 2 - 30 * 250), round(data.shape[1] / 2 + 30 * 250))]
             newraw = myfe.filter_eeg(data, 250, 0.5, 100, 50)
 
             PSE = myfe.pse(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
@@ -47,7 +47,7 @@ def main():
 
             feature = np.append(feature, PSE)
             feature = np.append(feature, CF)
-            #feature = np.append(feature, RCF)
+            feature = np.append(feature, RCF)
 
             if flag:
                 flag = False
@@ -55,19 +55,21 @@ def main():
                 continue
             features = np.vstack((features, feature))
 
-    x_train, x_test, y_train, y_test = train_test_split(features, labels, test_size=0.3)
+    x_train, x_test, y_train, y_test = train_test_split(features, labels, test_size=0.2)
 
     # 利用网格搜索得出较好的超参数
-    param_grid = {'C': [0.01, 1, 10, 100],
-                  'gamma': [1, 0.1, 0.01, 0.001],
+    param_grid = {'C': [0.1, 1, 10, 50],
+                  'gamma': [1, 0.1, 0.05, 2],
                   'degree': [0, 1, 2, 3],
-                  'kernel': ['rbf', 'poly', 'linear']}
+                  'kernel': ['rbf', 'poly', 'linear']
+                  }
 
     model = svm.SVC()
+    loo = LeaveOneOut()
     # 创建一个GridSearchCV对象
-    grid = GridSearchCV(model, param_grid, refit=True, n_jobs=16, verbose=3)
+    grid = GridSearchCV(model, param_grid, cv=loo, n_jobs=16, verbose=3)
     # 使用训练集的特征和标签训练分类器
-    grid.fit(x_train, y_train)
+    grid.fit(features, labels)
     print("Best: %f using %s" % (grid.best_score_, grid.best_params_))
     y_pred = grid.predict(x_test)
 

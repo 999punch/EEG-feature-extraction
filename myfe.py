@@ -142,6 +142,11 @@ def rcf(data, srate, channels):
     return RCF
 
 
+def cd(data,channels):
+    return cd
+
+
+
 # 用于函数编写时的测试
 def main():
     mne.set_log_level(verbose='WARNING')
@@ -149,21 +154,22 @@ def main():
         r"D:\IDM\下载\抑郁症数据集\MODMA数据集\EEG_3channels_resting_lanzhou_2015\02020018_still.mat")
     data = data['data'] / 1000000
     data = data.T
-    data = data[:, list(range(60 * 250))]
+    data = data[:, np.arange(round(data.shape[1]/2-30*250),round(data.shape[1]/2+30*250))]
+    print(data.shape)
     newraw = filter_eeg(data, 250, 0.5, 100, 50)
 
-    # 功率谱熵
-    p = pse(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
-    print(p)
-    plt.show()
+    # # 功率谱熵
+    # p = pse(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
+    # print(p)
+    # plt.show()
 
     # # 香农熵
     # s = se(newraw.get_data(), newraw.info['nchan'])
     # print(s)
 
-    # 中心频率
-    q = cf(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
-    print(q)
+    # # 中心频率
+    # q = cf(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
+    # print(q)
 
     # 相对中心频率
     r = rcf(newraw.get_data(), newraw.info['sfreq'], newraw.info['nchan'])
